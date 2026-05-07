@@ -89,12 +89,6 @@ def test_status_transcribing_is_step_two() -> None:
     assert "מתמלל" in msg
 
 
-def test_status_downloading_model_indicates_first_time() -> None:
-    msg = replies.status_downloading_model()
-    assert msg.startswith("2/5")
-    assert "מודל" in msg
-
-
 def test_status_loading_model_indicates_cache_load() -> None:
     msg = replies.status_loading_model()
     assert msg.startswith("2/5")
@@ -124,3 +118,28 @@ def test_status_structuring_is_step_four() -> None:
 def test_error_message_is_short_hebrew() -> None:
     msg = replies.error_message()
     assert "שגיאה" in msg
+
+
+def test_error_message_includes_error_class_and_text() -> None:
+    msg = replies.error_message(error=ValueError("audio download failed"))
+    assert "שגיאה" in msg
+    assert "ValueError" in msg
+    assert "audio download failed" in msg
+
+
+def test_error_message_includes_update_id_for_log_grep() -> None:
+    msg = replies.error_message(error=RuntimeError("boom"), update_id=128258000)
+    assert "128258000" in msg
+    assert "RuntimeError" in msg
+
+
+def test_error_message_truncates_very_long_error_text() -> None:
+    long = "x" * 500
+    msg = replies.error_message(error=RuntimeError(long))
+    assert len(msg) < 500
+    assert "…" in msg
+
+
+def test_error_message_no_args_falls_back_to_generic() -> None:
+    msg = replies.error_message()
+    assert msg == "שגיאה זמנית. נסה שוב."
