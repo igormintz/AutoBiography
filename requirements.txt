@@ -1,0 +1,24 @@
+# Vercel reads this file to install Python deps for the serverless function.
+# This is the production runtime — keep in sync with pyproject.toml [project.dependencies].
+# Notably we EXCLUDE the optional `ml` extra (`faster-whisper`, `ctranslate2`,
+# `onnxruntime`, model weights) because they exceed Vercel's bundle limits.
+# When `faster-whisper` isn't importable, `app.pipeline.transcribe` falls back
+# to OpenAI's Whisper API automatically.
+
+fastapi>=0.115
+# Vercel's Python runtime serves ASGI directly; uvicorn is only needed for
+# local `uv run uvicorn ...`. Including it is harmless and keeps `python -m
+# uvicorn` available for `vercel dev`.
+uvicorn[standard]>=0.32
+pydantic>=2.9
+pydantic-settings>=2.6
+python-telegram-bot>=21.6
+openai>=1.55
+sqlmodel>=0.0.22
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30
+alembic>=1.14
+structlog>=24.4
+httpx>=0.27
+tenacity>=9.0
+python-multipart>=0.0.18
