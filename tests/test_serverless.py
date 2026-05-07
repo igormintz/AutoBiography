@@ -136,3 +136,78 @@ async def test_cron_endpoint_accepts_correct_bearer(monkeypatch) -> None:
 
     monkeypatch.delenv("CRON_SECRET", raising=False)
     main.get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_cron_migrate_rejects_unauthenticated(monkeypatch) -> None:
+    from app import main
+
+    fake_app = AsyncMock()
+    fake_app.initialize = AsyncMock()
+    fake_app.start = AsyncMock()
+    fake_app.stop = AsyncMock()
+    fake_app.shutdown = AsyncMock()
+    fake_app.bot.send_message = AsyncMock()
+    monkeypatch.setattr(main, "build_application", lambda: fake_app)
+
+    monkeypatch.setenv("CRON_SECRET", "expected-secret")
+    main.get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    transport = ASGITransport(app=main.app)
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        main.lifespan(main.app),
+    ):
+        r = await client.post("/api/cron/migrate")
+        assert r.status_code == 401
+
+        r = await client.post(
+            "/api/cron/migrate",
+            headers={"Authorization": "Bearer wrong"},
+        )
+        assert r.status_code == 401
+
+    monkeypatch.delenv("CRON_SECRET", raising=False)
+    main.get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_cron_migrate_runs_upgrade_head_when_authorized(monkeypatch) -> None:
+    from app import main
+
+    fake_app = AsyncMock()
+    fake_app.initialize = AsyncMock()
+    fake_app.start = AsyncMock()
+    fake_app.stop = AsyncMock()
+    fake_app.shutdown = AsyncMock()
+    fake_app.bot.send_message = AsyncMock()
+    monkeypatch.setattr(main, "build_application", lambda: fake_app)
+
+    called = {"count": 0}
+
+    def fake_upgrade_head() -> str:
+        called["count"] += 1
+        return "0001"
+
+    monkeypatch.setattr(main, "run_alembic_upgrade_head", fake_upgrade_head)
+    monkeypatch.setenv("CRON_SECRET", "expected-secret")
+    main.get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    transport = ASGITransport(app=main.app)
+    async with (
+        AsyncClient(transport=transport, base_url="http://test") as client,
+        main.lifespan(main.app),
+    ):
+        r = await client.post(
+            "/api/cron/migrate",
+            headers={"Authorization": "Bearer expected-secret"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "ok"
+        assert body["revision"] == "0001"
+
+    assert called["count"] == 1
+
+    monkeypatch.delenv("CRON_SECRET", raising=False)
+    main.get_settings.cache_clear()  # type: ignore[attr-defined]
