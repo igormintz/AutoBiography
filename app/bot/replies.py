@@ -39,10 +39,6 @@ def status_transcribing() -> str:
     return "2/5 🎙️ מתמלל…"
 
 
-def status_downloading_model() -> str:
-    return "2/5 ⏬ מוריד מודל תמלול (פעם ראשונה, עד כמה דקות)…"
-
-
 def status_loading_model() -> str:
     """Model files are already cached locally — just need to load into RAM."""
     return "2/5 ⏳ טוען מודל תמלול מהמטמון (כמה שניות)…"
@@ -60,14 +56,37 @@ def status_structuring() -> str:
     return "4/5 🧠 מנתח…"
 
 
-def error_message() -> str:
-    return "שגיאה זמנית. נסה שוב."
+def error_message(
+    *,
+    error: BaseException | None = None,
+    update_id: int | str | None = None,
+) -> str:
+    """User-facing error reply.
+
+    The bot is private, so we surface the exception class, a short snippet of
+    the message, and the Telegram ``update_id`` — that's enough for the owner
+    to correlate the reply with a structlog line (``rg update_id=<id>``)
+    without digging through the server logs blind.
+    """
+    base = "שגיאה זמנית. נסה שוב."
+    if error is None and update_id is None:
+        return base
+
+    parts: list[str] = [base]
+    if error is not None:
+        cls = type(error).__name__
+        text = str(error).strip().replace("\n", " ")
+        if len(text) > 160:
+            text = text[:160] + "…"
+        parts.append(f"[{cls}] {text}" if text else f"[{cls}]")
+    if update_id is not None:
+        parts.append(f"🔎 update_id={update_id}")
+    return "\n".join(parts)
 
 
 # --- backwards-compatible constants used elsewhere (orchestrator) ---
 # Kept so callers that don't yet pass timing info still get a Hebrew status.
 
-STATUS_DOWNLOADING_MODEL = status_downloading_model()
 STATUS_TRANSCRIBING = status_transcribing()
 STATUS_STRUCTURING = status_structuring()
 STATUS_SAVING = status_saving()
