@@ -20,6 +20,12 @@ WORKDIR /app
 COPY pyproject.toml uv.lock* ./
 RUN uv sync --frozen --no-dev --extra ml
 
+# Pre-fetch the Whisper weights into HF_HOME so the running container never
+# has to download multiple GB on its first request. Cached as its own layer
+# so app code changes don't re-download the model.
+COPY scripts/download_model.py scripts/download_model.py
+RUN uv run --no-dev --extra ml python scripts/download_model.py
+
 COPY . .
 
 EXPOSE 8080
