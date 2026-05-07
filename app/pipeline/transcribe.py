@@ -17,7 +17,6 @@ import os
 import tempfile
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from app.config import get_settings
@@ -81,20 +80,6 @@ def get_model():
 def is_model_loaded() -> bool:
     """True iff the Whisper model has already been initialized in this process."""
     return _model is not None
-
-
-def is_model_cached_on_disk() -> bool:
-    """True iff the HuggingFace cache already contains a downloaded snapshot.
-
-    Checks for a non-empty `snapshots/<commit>/` directory under
-    `<hf_home>/models--<owner>--<name>/`.
-    """
-    settings = get_settings()
-    repo_dir = settings.whisper_model.replace("/", "--")
-    snapshots = Path(settings.hf_home) / f"models--{repo_dir}" / "snapshots"
-    if not snapshots.is_dir():
-        return False
-    return any(child.is_dir() and any(child.iterdir()) for child in snapshots.iterdir())
 
 
 def reset_model_for_tests() -> None:

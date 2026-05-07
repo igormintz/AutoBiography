@@ -13,7 +13,7 @@ from app.bot import replies
 from app.config import get_settings
 from app.logging import get_logger
 from app.pipeline.structure import Structured, structure_with_retry
-from app.pipeline.transcribe import is_model_cached_on_disk, is_model_loaded, transcribe_bytes
+from app.pipeline.transcribe import is_model_loaded, transcribe_bytes
 from app.store import repo
 from app.store.db import session_scope
 from app.store.local_store import LocalStore
@@ -52,12 +52,12 @@ async def process_voice(
     pipeline_started = time.perf_counter()
     log.info("pipeline_voice_start", bytes=len(audio_bytes))
 
+    # The model weights are baked into the image at build time, so the only
+    # cold-start cost is loading them into RAM. No need to probe the cache.
     if is_model_loaded():
         await _emit(status, replies.status_transcribing())
-    elif is_model_cached_on_disk():
-        await _emit(status, replies.status_loading_model())
     else:
-        await _emit(status, replies.status_downloading_model())
+        await _emit(status, replies.status_loading_model())
 
     log.info("transcribe_start", model_loaded=is_model_loaded())
     transcribe_started = time.perf_counter()
