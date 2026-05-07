@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 from datetime import datetime, timezone
 
@@ -31,17 +30,6 @@ log = get_logger(__name__)
 
 # Local store is built lazily; tests override via _override_drive_for_tests.
 _drive: LocalStore | None = None
-
-# Tracks fire-and-forget pipeline tasks so the GC keeps them alive
-# until they complete. We discard each task in its own done-callback.
-_running_tasks: set[asyncio.Task] = set()
-
-
-def _spawn(coro, *, name: str) -> asyncio.Task:
-    task = asyncio.create_task(coro, name=name)
-    _running_tasks.add(task)
-    task.add_done_callback(_running_tasks.discard)
-    return task
 
 
 def _drive_or_none() -> LocalStore | None:
@@ -321,14 +309,18 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         seconds=time.perf_counter() - download_started,
     )
 
-    _spawn(
-        _run_voice_pipeline(
-            audio_bytes=audio_bytes,
-            chat_id=update.effective_chat.id,
-            ack_message_id=ack.message_id,
-            bot=context.bot,
-        ),
-        name="voice_pipeline",
+    # Run the pipeline inline. Detaching it as a background task only works on
+    # long-lived processes (Railway/Docker); on serverless platforms the
+    # function is frozen the moment the webhook responds, killing background
+    # work mid-flight. Awaiting inline holds the webhook open until the
+    # pipeline completes (well within Vercel's `maxDuration`), and is safe on
+    # long-lived servers too — concurrent updates still execute in parallel
+    # via FastAPI/PTB's per-update tasks.
+    await _run_voice_pipeline(
+        audio_bytes=audio_bytes,
+        chat_id=update.effective_chat.id,
+        ack_message_id=ack.message_id,
+        bot=context.bot,
     )
 
 
@@ -409,14 +401,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log.info("text_received", chars=len(body))
     ack = await update.message.reply_text(replies.ACK_TEXT)
 
-    _spawn(
-        _run_text_pipeline(
-            text=body,
-            chat_id=update.effective_chat.id,
-            ack_message_id=ack.message_id,
-            bot=context.bot,
-        ),
-        name="text_pipeline",
+    await _run_text_pipeline(
+        text=body,
+        chat_id=update.effective_chat.id,
+        ack_message_id=ack.message_id,
+        bot=context.bot,
     )
 
 
