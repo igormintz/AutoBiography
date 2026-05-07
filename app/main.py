@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from sqlalchemy import text
@@ -31,6 +32,30 @@ from app.logging import configure_logging, get_logger
 from app.store.db import dispose_engine, get_engine
 
 log = get_logger(__name__)
+
+# Repo root: holds alembic.ini + migrations/ next to the `app/` package.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def run_alembic_upgrade_head() -> str:
+    """Run ``alembic upgrade head`` against the configured DATABASE_URL.
+
+    Synchronous wrapper around Alembic's command API, intended to be called
+    from the cron handler via ``asyncio.to_thread`` — Alembic's env.py uses
+    ``asyncio.run`` internally, which fights any already-running event loop.
+    Returns the head revision id (e.g. ``"0001"``) on success.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config(str(_REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", get_settings().database_url)
+    command.upgrade(cfg, "head")
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    return head or ""
+
 
 # Module-level cache for the Telegram Application. On a long-running server
 # this is populated once during lifespan startup. On serverless platforms,
@@ -198,3 +223,20 @@ async def cron_daily_digest(
                 log.warning("digest_send_failed", error=str(e), user_id=uid)
 
     return await daily_digest_once(_send)
+
+
+@app.post("/api/cron/migrate")
+async def cron_migrate(
+    authorization: str | None = Header(default=None),
+) -> dict[str, str]:
+    """One-shot ``alembic upgrade head`` against the configured DATABASE_URL.
+
+    Useful after pointing the project at a fresh Neon branch — instead of
+    running migrations from a laptop, hit this endpoint with the cron bearer
+    token and the schema is created in-place.
+    """
+    _require_cron_auth(authorization)
+    log.info("cron_migrate_started")
+    revision = await asyncio.to_thread(run_alembic_upgrade_head)
+    log.info("cron_migrate_done", revision=revision)
+    return {"status": "ok", "revision": revision}
