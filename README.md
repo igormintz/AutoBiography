@@ -114,6 +114,22 @@ Setup:
    On the **Pro plan** you can tighten `retry-pending` to e.g.
    `*/30 * * * *` for sub-daily retries.
 
+#### Pulling production data back to your laptop
+
+On Vercel the `LocalStore` writes to `/tmp`, which is per-invocation only —
+the durable copy of every entry lives in Postgres. To get a local mirror of
+production in the same `biography_output/` layout the live pipeline writes
+locally:
+
+```bash
+DATABASE_URL=<prod-asyncpg-url> \
+    uv run python scripts/dump_from_db.py --output-dir ./prod_dump
+```
+
+This produces `prod_dump/text/<short_id>.txt` (raw transcripts) and
+`prod_dump/entries/<short_id>.json` (structured payloads). Re-run any time
+to refresh the snapshot.
+
 #### Known limits on Vercel
 
 - **No GPU, no `faster-whisper`.** Hebrew transcription quality drops
