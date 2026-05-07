@@ -533,7 +533,7 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
     if chat_id is None:
         return
 
-    text = replies.error_message()
+    text = replies.error_message(error=err, update_id=update_id)
     try:
         if msg is not None:
             await msg.reply_text(text)
