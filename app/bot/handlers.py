@@ -321,6 +321,7 @@ async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id,
         ack_message_id=ack.message_id,
         bot=context.bot,
+        update_id=getattr(update, "update_id", None),
     )
 
 
@@ -346,6 +347,7 @@ async def _run_voice_pipeline(
     chat_id: int,
     ack_message_id: int,
     bot,
+    update_id: int | None = None,
 ) -> None:
     started = time.perf_counter()
     status = _make_status_editor(bot, chat_id, ack_message_id)
@@ -358,8 +360,15 @@ async def _run_voice_pipeline(
             status=status,
         )
     except Exception as e:
+        # Surface the real exception class + update_id to Telegram so the
+        # owner can correlate the failure end-to-end without server logs.
+        # The legacy "TRANSCRIBE_FAILED" copy was misleading — the same path
+        # also catches DB/structuring/Drive failures.
         log.exception("voice_pipeline_failed", error=str(e))
-        await bot.send_message(chat_id=chat_id, text=replies.TRANSCRIBE_FAILED)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=replies.error_message(error=e, update_id=update_id),
+        )
         return
 
     text = (
@@ -406,6 +415,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id,
         ack_message_id=ack.message_id,
         bot=context.bot,
+        update_id=getattr(update, "update_id", None),
     )
 
 
@@ -415,6 +425,7 @@ async def _run_text_pipeline(
     chat_id: int,
     ack_message_id: int,
     bot,
+    update_id: int | None = None,
 ) -> None:
     status = _make_status_editor(bot, chat_id, ack_message_id)
     try:
@@ -426,8 +437,13 @@ async def _run_text_pipeline(
             status=status,
         )
     except Exception as e:
+        # See _run_voice_pipeline: surface the real error class to Telegram
+        # instead of the misleading "NEEDS_STRUCTURING" copy.
         log.exception("text_pipeline_failed", error=str(e))
-        await bot.send_message(chat_id=chat_id, text=replies.NEEDS_STRUCTURING)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=replies.error_message(error=e, update_id=update_id),
+        )
         return
 
     out = (
