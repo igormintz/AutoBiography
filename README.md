@@ -102,13 +102,17 @@ Setup:
    BASE_URL=<your-vercel-url> ./scripts/set_webhook.sh
    ```
 
-6. The two cron jobs declared in `vercel.json` run automatically:
+6. The two cron jobs declared in `vercel.json` run automatically.
+   Vercel's **Hobby plan only allows daily crons**, so both run once a
+   day in UTC:
 
-   - `/api/cron/retry-pending` every 30 min — re-runs structuring on
-     entries flagged `needs_structuring`.
+   - `/api/cron/retry-pending` daily at 03:00 UTC — re-runs structuring
+     on entries flagged `needs_structuring`.
    - `/api/cron/daily-digest` daily at 06:00 UTC (≈ 09:00 Asia/Jerusalem;
-     shifts by an hour during DST). Adjust `vercel.json` if you want
-     exact local-time alignment.
+     shifts by an hour during DST).
+
+   On the **Pro plan** you can tighten `retry-pending` to e.g.
+   `*/30 * * * *` for sub-daily retries.
 
 #### Known limits on Vercel
 
